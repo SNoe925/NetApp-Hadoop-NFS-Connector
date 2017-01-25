@@ -15,10 +15,8 @@ package org.apache.hadoop.fs.nfs.topology;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -31,11 +29,18 @@ public class SimpleTopologyRouter extends TopologyRouter {
     
     NFSv3FileSystem fs;
     Namespace space;
-    Map<Endpoint,NFSv3FileSystemStore> stores;
+    ArrayList<Map<Endpoint,NFSv3FileSystemStore>> stores;
     public final static Log LOG = LogFactory.getLog(SimpleTopologyRouter.class);
     
     public SimpleTopologyRouter() {
-        stores = new HashMap<>();
+        stores = new ArrayList<>();
+        int cores = Runtime.getRuntime().availableProcessors();
+        if (cores < 1) {
+            cores = 1;
+        }
+        for (int ii = 0; ii < cores; ++ii) {
+            stores.add(new HashMap<Endpoint, NFSv3FileSystemStore>());
+        }
     }
     
     @Override
@@ -79,12 +84,13 @@ public class SimpleTopologyRouter extends TopologyRouter {
         
         // Choose an endpoint using the path
         Endpoint ep = chooseEndpoint(space, p);
-        if(!stores.containsKey(ep)) {
+        int r = Math.round((float)Math.random() * stores.size()) % stores.size();
+        if(!stores.get(r).containsKey(ep)) {
             NFSv3FileSystemStore store = new NFSv3FileSystemStore(fs, space, ep);
             store.initialize();
-            stores.put(ep, store);
+            stores.get(r).put(ep, store);
         }
-        return stores.get(ep);
+        return stores.get(r).get(ep);
     }
     
     @Override    
@@ -123,7 +129,8 @@ public class SimpleTopologyRouter extends TopologyRouter {
 
     @Override
     public synchronized List<NFSv3FileSystemStore> getAllStores() throws IOException {
-        return new LinkedList<>(stores.values());
+        // TODO add all of them
+        return new LinkedList<>(stores.get(0).values());
     }
     
 }
